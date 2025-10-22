@@ -611,9 +611,7 @@
     "FN – Build HTML with images": {
       "main": [
         [
-          { "node": "Move Binary – featured (b64 → bin)", "type": "main", "index": 0 }
-        ],
-        [
+          { "node": "Move Binary – featured (b64 → bin)", "type": "main", "index": 0 },
           { "node": "Merge – Article + Media", "type": "main", "index": 0 }
         ]
       ]
@@ -642,7 +640,8 @@
     "Merge – Article + Media": {
       "main": [
         [
-          { "node": "WP – Create Post", "type": "main", "index": 0 }
+          { "node": "WP – Create Post", "type": "main", "index": 0 },
+          { "node": "Merge – Article + Post", "type": "main", "index": 0 }
         ]
       ]
     },
