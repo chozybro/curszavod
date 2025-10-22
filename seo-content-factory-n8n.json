@@ -1,0 +1,752 @@
+{
+  "name": "SEO Content Factory - Zavvod",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "Pending"
+            }
+          ]
+        },
+        "options": {
+          "rangeDefinition": "detectAutomatically"
+        }
+      },
+      "id": "google-sheets-read",
+      "name": "Read Topics from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "limit",
+        "maxItems": 1,
+        "keepOnlySet": "keepOnlySet"
+      },
+      "id": "limit-one-topic",
+      "name": "Limit to 1 Topic",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "topic-assignment",
+              "name": "topic",
+              "value": "={{ $json.Topic }}",
+              "type": "string"
+            },
+            {
+              "id": "keywords-assignment",
+              "name": "keywords",
+              "value": "={{ $json.Keywords }}",
+              "type": "string"
+            },
+            {
+              "id": "title-assignment",
+              "name": "title",
+              "value": "={{ $json.Title }}",
+              "type": "string"
+            },
+            {
+              "id": "language-assignment",
+              "name": "language",
+              "value": "={{ $json.Language || 'Russian' }}",
+              "type": "string"
+            },
+            {
+              "id": "wordcount-assignment",
+              "name": "wordCount",
+              "value": "={{ $json.WordCount || '2000' }}",
+              "type": "string"
+            },
+            {
+              "id": "rowid-assignment",
+              "name": "rowId",
+              "value": "={{ $json.rowNumber }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-variables",
+      "name": "Extract Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert SEO researcher. Your task is to research a topic thoroughly before writing about it. Provide detailed insights, statistics, and key points that should be covered."
+            },
+            {
+              "role": "user",
+              "content": "Research the following topic in detail: {{ $json.topic }}\n\nKeywords to focus on: {{ $json.keywords }}\n\nProvide:\n1. Key statistics and facts\n2. Main subtopics to cover\n3. Expert insights\n4. Current trends\n5. Common questions people ask\n\nLanguage: {{ $json.language }}"
+            }
+          ]
+        }
+      },
+      "id": "ai-research-topic",
+      "name": "AI Research Topic",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.8,
+          "maxTokens": 4000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert SEO content writer. Write comprehensive, engaging, and well-structured articles that rank well in search engines. Use proper headings (H2, H3), include keywords naturally, and write in an authoritative yet accessible tone."
+            },
+            {
+              "role": "user",
+              "content": "Write a comprehensive SEO-optimized article based on the following information:\n\nTitle: {{ $('Extract Variables').item.json.title }}\nTopic: {{ $('Extract Variables').item.json.topic }}\nKeywords: {{ $('Extract Variables').item.json.keywords }}\nTarget word count: {{ $('Extract Variables').item.json.wordCount }}\nLanguage: {{ $('Extract Variables').item.json.language }}\n\nResearch findings:\n{{ $json.message.content }}\n\nIMPORTANT:\n- Write in {{ $('Extract Variables').item.json.language }}\n- Use HTML formatting with proper headings (h2, h3)\n- Include keywords naturally throughout\n- Make it approximately {{ $('Extract Variables').item.json.wordCount }} words\n- Include an introduction and conclusion\n- Use bullet points and numbered lists where appropriate\n- Add relevant internal linking suggestions as [LINK: anchor text]\n\nReturn ONLY the HTML content of the article, without wrapping html/body tags."
+            }
+          ]
+        }
+      },
+      "id": "ai-write-article",
+      "name": "AI Write Article",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "article-content",
+              "name": "articleContent",
+              "value": "={{ $json.message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "article-title",
+              "name": "articleTitle",
+              "value": "={{ $('Extract Variables').item.json.title }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "store-article",
+      "name": "Store Article Content",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.9
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a creative image prompt generator. Create detailed, vivid prompts for AI image generation that are relevant to article content."
+            },
+            {
+              "role": "user",
+              "content": "Generate 4 detailed image prompts for an article about: {{ $('Extract Variables').item.json.topic }}\n\nEach prompt should be:\n- Descriptive and specific\n- Relevant to the topic\n- Suitable for article illustrations\n- Professional and high-quality looking\n\nReturn as JSON array with format: [{\"prompt\": \"description\", \"purpose\": \"hero/section1/section2/conclusion\"}]"
+            }
+          ]
+        }
+      },
+      "id": "generate-image-prompts",
+      "name": "Generate Image Prompts",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "jsonToPairedItem",
+        "options": {}
+      },
+      "id": "split-image-prompts",
+      "name": "Split Image Prompts",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "generate",
+        "prompt": "={{ $json.prompt }}",
+        "size": "1024x1024",
+        "quality": "standard",
+        "options": {
+          "model": "dall-e-3"
+        }
+      },
+      "id": "generate-images-dalle",
+      "name": "Generate Images (DALL-E)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        2220,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data[0].url }}",
+        "options": {}
+      },
+      "id": "download-images",
+      "name": "Download Images",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "url": "https://YOUR-WORDPRESS-SITE.com",
+        "binaryData": true,
+        "mediaParametersUi": {
+          "title": "={{ $('Extract Variables').item.json.topic }} - {{ $json.purpose }}",
+          "altText": "={{ $json.prompt }}"
+        }
+      },
+      "id": "upload-to-wordpress-media",
+      "name": "Upload to WordPress Media",
+      "type": "n8n-nodes-base.wordpress",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        300
+      ],
+      "credentials": {
+        "wordpressApi": {
+          "id": "YOUR_WORDPRESS_CREDENTIAL_ID",
+          "name": "WordPress account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "id": "aggregate-images",
+      "name": "Aggregate Images",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const images = $input.all();\nconst articleContent = $('Store Article Content').item.json.articleContent;\nconst articleTitle = $('Store Article Content').item.json.articleTitle;\n\n// Build featured image ID (first image)\nconst featuredImageId = images[0].json.id;\n\n// Insert images into article content\nlet enhancedContent = articleContent;\n\n// Add featured image at the beginning\nif (images.length > 0) {\n  enhancedContent = `<figure class=\"wp-block-image\"><img src=\"${images[0].json.source_url}\" alt=\"${images[0].json.alt_text}\" class=\"wp-image-${images[0].json.id}\"/></figure>\\n\\n` + enhancedContent;\n}\n\n// Insert other images throughout the content\nconst contentSections = enhancedContent.split('</h2>');\nfor (let i = 1; i < Math.min(images.length, contentSections.length); i++) {\n  if (contentSections[i]) {\n    contentSections[i] = `<figure class=\"wp-block-image\"><img src=\"${images[i].json.source_url}\" alt=\"${images[i].json.alt_text}\" class=\"wp-image-${images[i].json.id}\"/></figure>\\n\\n` + contentSections[i];\n  }\n}\n\nenhancedContent = contentSections.join('</h2>');\n\nreturn {\n  json: {\n    title: articleTitle,\n    content: enhancedContent,\n    featuredImageId: featuredImageId,\n    topic: $('Extract Variables').item.json.topic,\n    keywords: $('Extract Variables').item.json.keywords,\n    rowId: $('Extract Variables').item.json.rowId\n  }\n};"
+      },
+      "id": "prepare-wordpress-post",
+      "name": "Prepare WordPress Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "url": "https://YOUR-WORDPRESS-SITE.com",
+        "content": "={{ $json.content }}",
+        "postType": "post",
+        "additionalFields": {
+          "title": "={{ $json.title }}",
+          "status": "publish",
+          "featuredMediaId": "={{ $json.featuredImageId }}",
+          "categories": [],
+          "tags": "={{ $json.keywords.split(',').map(k => k.trim()) }}"
+        }
+      },
+      "id": "publish-to-wordpress",
+      "name": "Publish to WordPress",
+      "type": "n8n-nodes-base.wordpress",
+      "typeVersion": 1,
+      "position": [
+        3320,
+        300
+      ],
+      "credentials": {
+        "wordpressApi": {
+          "id": "YOUR_WORDPRESS_CREDENTIAL_ID",
+          "name": "WordPress account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "dataMode": "defineBelow",
+        "fieldsUi": {
+          "values": [
+            {
+              "fieldId": "Status",
+              "fieldValue": "Published"
+            },
+            {
+              "fieldId": "ArticleURL",
+              "fieldValue": "={{ $json.link }}"
+            },
+            {
+              "fieldId": "PublishDate",
+              "fieldValue": "={{ $now.toFormat('yyyy-MM-dd HH:mm:ss') }}"
+            }
+          ]
+        },
+        "options": {
+          "dataLocationOnSheet": "headerRow",
+          "cellFormat": "USER_ENTERED",
+          "useAppend": false
+        }
+      },
+      "id": "update-google-sheets-status",
+      "name": "Update Google Sheets Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        3540,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "error-check",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-for-errors",
+      "name": "Check for Errors",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "dataMode": "defineBelow",
+        "fieldsUi": {
+          "values": [
+            {
+              "fieldId": "Status",
+              "fieldValue": "Error"
+            },
+            {
+              "fieldId": "ErrorMessage",
+              "fieldValue": "={{ $json.error }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-error-status",
+      "name": "Update Error Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        3540,
+        600
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Topics from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Topics from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Limit to 1 Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit to 1 Topic": {
+      "main": [
+        [
+          {
+            "node": "Extract Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Variables": {
+      "main": [
+        [
+          {
+            "node": "AI Research Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Research Topic": {
+      "main": [
+        [
+          {
+            "node": "AI Write Article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Write Article": {
+      "main": [
+        [
+          {
+            "node": "Store Article Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Article Content": {
+      "main": [
+        [
+          {
+            "node": "Generate Image Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image Prompts": {
+      "main": [
+        [
+          {
+            "node": "Split Image Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Image Prompts": {
+      "main": [
+        [
+          {
+            "node": "Generate Images (DALL-E)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Images (DALL-E)": {
+      "main": [
+        [
+          {
+            "node": "Download Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Images": {
+      "main": [
+        [
+          {
+            "node": "Upload to WordPress Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to WordPress Media": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Images": {
+      "main": [
+        [
+          {
+            "node": "Prepare WordPress Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare WordPress Post": {
+      "main": [
+        [
+          {
+            "node": "Publish to WordPress",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check for Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to WordPress": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheets Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Errors": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheets Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Error Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "seo-content-factory"
+  },
+  "id": "seo-content-factory",
+  "tags": [
+    {
+      "createdAt": "2025-10-22T00:00:00.000Z",
+      "updatedAt": "2025-10-22T00:00:00.000Z",
+      "id": "1",
+      "name": "SEO"
+    },
+    {
+      "createdAt": "2025-10-22T00:00:00.000Z",
+      "updatedAt": "2025-10-22T00:00:00.000Z",
+      "id": "2",
+      "name": "Content"
+    },
+    {
+      "createdAt": "2025-10-22T00:00:00.000Z",
+      "updatedAt": "2025-10-22T00:00:00.000Z",
+      "id": "3",
+      "name": "Automation"
+    }
+  ]
+}
