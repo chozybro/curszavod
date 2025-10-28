@@ -1,0 +1,705 @@
+{
+  "name": "SEO Content Factory: Sheets → OpenAI → Images → WordPress",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manualTriggerMain",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1540,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "unit": "days",
+              "value": 2
+            }
+          ]
+        }
+      },
+      "id": "cronEvery2Days",
+      "name": "Cron – every 2 days",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -1540,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "sheet_id",
+              "value": "1upcnPvj_n6OjaQmWqiQaRTJ7OFdMK3w_2WwoUY04yCY"
+            },
+            {
+              "name": "sheet_name",
+              "value": "Sheet1"
+            },
+            {
+              "name": "wp_base_url",
+              "value": "https://naturalhealdaily.com"
+            },
+            {
+              "name": "publication_status",
+              "value": "draft"
+            },
+            {
+              "name": "default_language",
+              "value": "ru"
+            }
+          ],
+          "number": [
+            {
+              "name": "images_count_default",
+              "value": 3
+            },
+            {
+              "name": "target_length_default",
+              "value": 1400
+            }
+          ]
+        }
+      },
+      "id": "setDefaults",
+      "name": "Set Defaults",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -1320,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$json.sheet_id}}",
+        "range": "A:Z",
+        "options": {
+          "sheetName": "={{$json.sheet_name}}",
+          "keyRow": 1,
+          "returnAll": true,
+          "valueRenderMode": "UNFORMATTED_VALUE",
+          "dateTimeRenderOption": "FORMATTED_STRING"
+        }
+      },
+      "id": "gsReadAll",
+      "name": "GS – Read All Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 6,
+      "position": [
+        -1080,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const rows = items.map((i, idx) => ({ ...i.json, __rowIndex: idx + 2 }));\nconst pick = rows.find(r => {\n  const s = (r.status || '').toString().trim().toLowerCase();\n  return (s === 'ready') || ((s === '' || s === 'new') && (r.topic || r.title));\n});\nif (!pick) { return []; }\nif (!pick.language) pick.language = $json.default_language || 'ru';\nif (!pick.images_count) pick.images_count = $json.images_count_default || 3;\nif (!pick.target_length) pick.target_length = $json.target_length_default || 1400;\nconst rowId = pick.id || pick.__rowIndex;\nreturn [{ json: { ...pick, __found: 1, __sheetName: $json.sheet_name, __sheetId: $json.sheet_id, __wpBase: $json.wp_base_url, __wpStatus: $json.publication_status, __rowId: rowId } }];"
+      },
+      "id": "fnPickRow",
+      "name": "FN – Next Ready Row",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -840,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.__found || 0}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "ifHasRow",
+      "name": "IF – Has Row",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "sendBody": true,
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer <YOUR_API>\",\n  \"Content-Type\": \"application/json\"\n}",
+        "bodyParametersJson": "{\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0.5,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert SEO editor and subject-matter researcher (E-E-A-T). Respond ONLY with valid minified JSON. Keys: research_brief (string), outline (array of {section_title,key_points}), sources (array of {title,url}), working_title (string), slug (string, kebab-case), meta_description (string 150-160 chars), image_prompts (array of 3-5 {prompt,alt}).\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Topic: {{$json.topic || $json.title}}\\nKeywords: {{$json.keywords}}\\nLanguage (BCP-47): {{$json.language}}\\nTarget length (words): {{$json.target_length}}\\nTone: {{$json.tone || 'expert but accessible'}}\\nAudience: {{$json.audience || 'broad online readers'}}\\nCountry/locale: {{$json.country || 'RU'}}\\nResearch depth: {{$json.research_depth || 'standard'}}\\nTask: 1) Research the topic using your internal knowledge and best practices, produce research_brief, 2) Propose a detailed outline with H2/H3 titles and key_points, 3) Propose 3-5 image_prompts relevant to sections with descriptive alt texts, 4) Suggest working_title, slug and meta_description. Output JSON only.\"\n    }\n  ]\n}"
+      },
+      "id": "httpOpenAIResearch",
+      "name": "OpenAI – Research & Outline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -380,
+        -460
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByPosition",
+        "join": "combine"
+      },
+      "id": "mergeRowWithResearch",
+      "name": "Merge – Row + Research",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const out = [];\nfor (const item of items) {\n  const row = { ...item.json };\n  const resp = item.json.choices ? item.json : (item.json.httpResponse || {});\n  const content = (resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || '';\n  let parsed = {};\n  try { parsed = JSON.parse(content); } catch { parsed = { research_brief: content }; }\n  out.push({ json: { ...row, __research: parsed.research_brief || '', __outline: parsed.outline || [], __sources: parsed.sources || [], __working_title: parsed.working_title || (row.title || row.topic), __slug: parsed.slug || (row.slug || ''), __meta_description: parsed.meta_description || '', __image_prompts: parsed.image_prompts || [] } });\n}\nreturn out;"
+      },
+      "id": "fnParseResearch",
+      "name": "FN – Parse Research JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "sendBody": true,
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer <YOUR_API>\",\n  \"Content-Type\": \"application/json\"\n}",
+        "bodyParametersJson": "{\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0.5,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert medical/health content writer. Produce a comprehensive, original, well-structured article with E-E-A-T. Strictly output JSON with keys: title, slug, excerpt, content_html. content_html must be clean semantic HTML (h2/h3 lists tables where relevant), no images, no scripts.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Language: {{$json.language}}\\nTitle (use or improve): {{$json.__working_title}}\\nSlug (use if present): {{$json.__slug}}\\nMeta description: {{$json.__meta_description}}\\nTarget length (words): {{$json.target_length}}\\nKeywords: {{$json.keywords}}\\nResearch brief: {{$json.__research}}\\nOutline JSON: {{$json.__outline}}\\nSources JSON: {{$json.__sources}}\\nTone: {{$json.tone || 'expert but accessible'}}\\nAudience: {{$json.audience || 'broad online readers'}}\\nCountry/locale: {{$json.country || 'RU'}}\\nWrite the article. Start with a concise TL;DR paragraph. Use h2 for main sections, h3 for subsections, bullets/steps/tables as suitable. Add internal and external links with descriptive anchor text (no spam). Avoid medical claims without hedging; include disclaimers where needed. Return JSON only.\"\n    }\n  ]\n}"
+      },
+      "id": "httpOpenAIArticle",
+      "name": "OpenAI – Article",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        140,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const out = [];\nfor (const item of items) {\n  const resp = item.json;\n  const content = (resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || '';\n  let parsed = {};\n  try { parsed = JSON.parse(content); } catch { parsed = { title: '', slug: '', excerpt: '', content_html: content }; }\n  out.push({ json: { ...item.json, __title: parsed.title || (item.json.__working_title || item.json.title || item.json.topic), __slug: parsed.slug || item.json.__slug || '', __excerpt: parsed.excerpt || item.json.__meta_description || '', __content_html: parsed.content_html || content, __image_prompts: item.json.__image_prompts || [] } });\n}\nreturn out;"
+      },
+      "id": "fnParseArticle",
+      "name": "FN – Parse Article JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        380,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openai.com/v1/images/generations",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "sendBody": true,
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer <YOUR_API>\",\n  \"Content-Type\": \"application/json\"\n}",
+        "bodyParametersJson": "{\n  \"model\": \"gpt-image-1\",\n  \"n\": {{ Math.min(Math.max(parseInt($json.images_count || $json.images_count_default || 3), 3), 5) }},\n  \"size\": \"1024x1024\",\n  \"response_format\": \"b64_json\",\n  \"prompt\": \"Generate high-quality, tasteful illustrative images matching the article in {{$json.language}}. Topic: {{$json.topic || $json.__title}}. Style: editorial, clean, informative, no text. If possible, diversify images across sections. Hints: {{ ($json.__image_prompts || []).map(p => p.prompt).join(' | ') }}\"\n}"
+      },
+      "id": "httpOpenAIImages",
+      "name": "OpenAI – Images (b64)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        620,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const out = [];\nfor (const item of items) {\n  const articleHtml = item.json.__content_html || '';\n  const images = (item.json.data || []).map(d => d.b64_json);\n  const featuredB64 = images[0] || '';\n  const galleryB64 = images.slice(1);\n  let galleryHtml = '';\n  if (galleryB64.length) {\n    galleryHtml = '<section><h2>Изображения по теме</h2>' + galleryB64.map((b64, idx) => {\n      const alt = (item.json.__image_prompts && item.json.__image_prompts[idx+1] && item.json.__image_prompts[idx+1].alt) || 'illustration';\n      return \`<figure><img src=\\\"data:image/png;base64,\${b64}\\\" alt=\\\"\${alt.replace(/\\"/g,'\\\\\"')}\\\" /><figcaption>\${alt}</figcaption></figure>\`;\n    }).join('') + '</section>'\n  }\n  const contentWithGallery = articleHtml + '\n' + galleryHtml;\n  out.push({ json: { ...item.json, __content_with_images: contentWithGallery, __featured_b64: featuredB64 } });\n}\nreturn out;"
+      },
+      "id": "fnBuildHtmlWithImages",
+      "name": "FN – Build HTML with images",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        860,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "setAllData": false,
+        "options": {},
+        "binaryPropertyName": "featured",
+        "dataPropertyName": "__featured_b64"
+      },
+      "id": "moveBinaryFeatured",
+      "name": "Move Binary – featured (b64 → bin)",
+      "type": "n8n-nodes-base.moveBinaryData",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "requestMethod": "POST",
+        "url": "={{$json.__wpBase}}/wp-json/wp/v2/media",
+        "allowUnauthorizedCerts": false,
+        "responseFormat": "json",
+        "sendBinaryData": true,
+        "binaryPropertyName": "featured",
+        "options": {
+          "headers": {
+            "Content-Type": "image/png",
+            "Content-Disposition": "attachment; filename=featured.png"
+          }
+        }
+      },
+      "id": "httpWpUploadFeatured",
+      "name": "WP – Upload featured media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        -180
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "",
+          "name": "(attach WP Basic Auth credential)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(i => ({ json: { wp_featured_id: i.json.id, wp_featured_url: i.json.source_url || (i.json.guid && i.json.guid.rendered) || '' } }));"
+      },
+      "id": "fnExtractMedia",
+      "name": "FN – Extract media id",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByPosition",
+        "join": "combine"
+      },
+      "id": "mergeArticleMedia",
+      "name": "Merge – Article + Media",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "requestMethod": "POST",
+        "url": "={{$json.__wpBase}}/wp-json/wp/v2/posts",
+        "allowUnauthorizedCerts": false,
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "bodyParametersJson": "{\n  \"status\": \"{{$json.__wpStatus}}\",\n  \"title\": \"{{$json.__title}}\",\n  \"slug\": \"{{$json.__slug}}\",\n  \"content\": \"{{$json.__content_with_images}}\",\n  \"excerpt\": \"{{$json.__excerpt}}\",\n  \"categories\": {{ ($json.wp_category_ids || '').split(',').map(c=>parseInt(c.trim())).filter(Boolean) }},\n  \"featured_media\": {{$json.wp_featured_id || 0}}\n}"
+      },
+      "id": "httpWpCreatePost",
+      "name": "WP – Create Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1820,
+        20
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "",
+          "name": "(attach WP Basic Auth credential)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(i => ({ json: { wp_post_id: i.json.id, wp_url: i.json.link || (i.json.guid && i.json.guid.rendered) || '' } }));"
+      },
+      "id": "fnExtractPost",
+      "name": "FN – Extract post data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        2060,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByPosition",
+        "join": "combine"
+      },
+      "id": "mergeArticlePost",
+      "name": "Merge – Article + Post",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        2060,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{$json.__sheetId}}",
+        "range": "={{$json.__sheetName}}",
+        "keyRow": 1,
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        },
+        "updateKey": "id",
+        "dataProperty": "={{$json}}",
+        "fieldsObject": {
+          "id": "={{$json.__rowId}}",
+          "status": "drafted",
+          "wp_status": "={{$json.__wpStatus}}",
+          "title": "={{$json.__title}}",
+          "slug": "={{$json.__slug}}",
+          "wp_post_id": "={{$json.wp_post_id}}",
+          "wp_url": "={{$json.wp_url}}"
+        }
+      },
+      "id": "gsUpdateDone",
+      "name": "GS – Update Row (drafted)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 6,
+      "position": [
+        2300,
+        -180
+      ]
+    },
+
+    {
+      "parameters": {},
+      "id": "manualTriggerIdeas",
+      "name": "Manual – Ideation",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1540,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "niche",
+              "value": "натуральное здоровье и велнес"
+            },
+            {
+              "name": "language",
+              "value": "ru"
+            },
+            {
+              "name": "tone",
+              "value": "экспертно, дружелюбно"
+            },
+            {
+              "name": "audience",
+              "value": "широкая аудитория"
+            }
+          ],
+          "number": [
+            {
+              "name": "count",
+              "value": 10
+            },
+            {
+              "name": "images_count",
+              "value": 3
+            },
+            {
+              "name": "target_length",
+              "value": 1400
+            }
+          ]
+        }
+      },
+      "id": "setIdeation",
+      "name": "Set – Ideation Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -1320,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "sendBody": true,
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer <YOUR_API>\",\n  \"Content-Type\": \"application/json\"\n}",
+        "bodyParametersJson": "{\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0.6,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You generate SEO content ideas. Output only JSON with key 'rows' as array of objects having: id, status='ready', language, topic, keywords (comma-separated), title, target_length, images_count, wp_status='draft', wp_category_ids (comma-separated numeric IDs or empty), tags (comma-separated), slug, tone, audience, country, research_depth.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Niche: {{$json.niche}}\\nLanguage: {{$json.language}}\\nTone: {{$json.tone}}\\nAudience: {{$json.audience}}\\nHow many: {{$json.count}} rows\\nDefault target_length: {{$json.target_length}} words\\nDefault images_count: {{$json.images_count}}\\nCountry: RU\\nResearch depth: standard\\nReturn JSON only.\"\n    }\n  ]\n}"
+      },
+      "id": "httpOpenAIIdeation",
+      "name": "OpenAI – Ideation (rows JSON)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -1080,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const out = [];\nconst payload = items[0].json;\nlet rows = [];\ntry { rows = JSON.parse(payload.choices[0].message.content).rows || []; } catch { rows = []; }\nfunction slugify(s){ return (s||'').toString().toLowerCase().replace(/[^a-z0-9\u0400-\u04FF]+/g,'-').replace(/^-+|-+$/g,''); }\nfunction uid(){ return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }\nfor (const r of rows) {\n  out.push({ json: {\n    id: r.id || uid(),\n    status: r.status || 'ready',\n    language: r.language || $json.language || 'ru',\n    topic: r.topic || '',\n    keywords: Array.isArray(r.keywords) ? r.keywords.join(', ') : (r.keywords || ''),\n    title: r.title || '',\n    target_length: r.target_length || $json.target_length || 1400,\n    images_count: r.images_count || $json.images_count || 3,\n    wp_status: r.wp_status || 'draft',\n    wp_category_ids: Array.isArray(r.wp_category_ids) ? r.wp_category_ids.join(',') : (r.wp_category_ids || ''),\n    tags: Array.isArray(r.tags) ? r.tags.join(', ') : (r.tags || ''),\n    slug: r.slug || slugify(r.title || r.topic || ''),\n    tone: r.tone || $json.tone || '',\n    audience: r.audience || $json.audience || '',\n    country: r.country || 'RU',\n    research_depth: r.research_depth || 'standard'\n  }});\n}\nreturn out;"
+      },
+      "id": "fnIdeationRows",
+      "name": "FN – Ideation → Rows",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -840,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "1upcnPvj_n6OjaQmWqiQaRTJ7OFdMK3w_2WwoUY04yCY",
+        "range": "A:Z",
+        "options": {
+          "sheetName": "Sheet1",
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "id": "gsAppendRows",
+      "name": "GS – Append Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 6,
+      "position": [
+        -600,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          { "node": "Set Defaults", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Cron – every 2 days": {
+      "main": [
+        [
+          { "node": "Set Defaults", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set Defaults": {
+      "main": [
+        [
+          { "node": "GS – Read All Rows", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "GS – Read All Rows": {
+      "main": [
+        [
+          { "node": "FN – Next Ready Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Next Ready Row": {
+      "main": [
+        [
+          { "node": "IF – Has Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF – Has Row": {
+      "main": [
+        [
+          { "node": "OpenAI – Research & Outline", "type": "main", "index": 0 }
+        ],
+        []
+      ]
+    },
+    "OpenAI – Research & Outline": {
+      "main": [
+        [
+          { "node": "Merge – Row + Research", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Merge – Row + Research": {
+      "main": [
+        [
+          { "node": "FN – Parse Research JSON", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Parse Research JSON": {
+      "main": [
+        [
+          { "node": "OpenAI – Article", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "OpenAI – Article": {
+      "main": [
+        [
+          { "node": "FN – Parse Article JSON", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Parse Article JSON": {
+      "main": [
+        [
+          { "node": "OpenAI – Images (b64)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "OpenAI – Images (b64)": {
+      "main": [
+        [
+          { "node": "FN – Build HTML with images", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Build HTML with images": {
+      "main": [
+        [
+          { "node": "Move Binary – featured (b64 → bin)", "type": "main", "index": 0 },
+          { "node": "Merge – Article + Media", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Move Binary – featured (b64 → bin)": {
+      "main": [
+        [
+          { "node": "WP – Upload featured media", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "WP – Upload featured media": {
+      "main": [
+        [
+          { "node": "FN – Extract media id", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Extract media id": {
+      "main": [
+        [
+          { "node": "Merge – Article + Media", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Merge – Article + Media": {
+      "main": [
+        [
+          { "node": "WP – Create Post", "type": "main", "index": 0 },
+          { "node": "Merge – Article + Post", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "WP – Create Post": {
+      "main": [
+        [
+          { "node": "FN – Extract post data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Extract post data": {
+      "main": [
+        [
+          { "node": "Merge – Article + Post", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Merge – Article + Post": {
+      "main": [
+        [
+          { "node": "GS – Update Row (drafted)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+
+    "Manual – Ideation": {
+      "main": [
+        [
+          { "node": "Set – Ideation Params", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set – Ideation Params": {
+      "main": [
+        [
+          { "node": "OpenAI – Ideation (rows JSON)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "OpenAI – Ideation (rows JSON)": {
+      "main": [
+        [
+          { "node": "FN – Ideation → Rows", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FN – Ideation → Rows": {
+      "main": [
+        [
+          { "node": "GS – Append Rows", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Europe/Moscow",
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "pinData": {}
+}
